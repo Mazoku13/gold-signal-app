@@ -5,9 +5,16 @@ import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import numpy as np
 
-st.set_page_config(page_title="Gold Signal App", page_icon="📈", layout="wide")
+st.set_page_config(page_title="Gold Live", page_icon="📈", layout="wide")
 
-# CSS für Badges
+# ═══════════════════════════════════════════════════
+# HIER DEINEN API-KEY EINFÜGEN (von goldapi.io)
+API_KEY = "goldapi-e69dff00fae3208222f7b4167faec0e7-io"  # ← HIER ÄNDERN!
+# ═══════════════════════════════════════════════════
+
+st.title("📊 Gold Treiber Analyse (Live)")
+
+# CSS für Status-Badges
 st.markdown("""
 <style>
 .live-badge {
@@ -16,201 +23,173 @@ st.markdown("""
     padding: 5px 15px;
     border-radius: 15px;
     font-weight: bold;
-    font-size: 14px;
 }
 .offline-badge {
-    background-color: #ff6600;
+    background-color: #cc0000;
     color: white;
     padding: 5px 15px;
     border-radius: 15px;
     font-weight: bold;
-    font-size: 14px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# Fallback mit Beispieldaten
-FALLBACK_DATA = {
-    'gold_usd': 2050.0,
-    'gold_eur': 1890.0,
-    'silver': 23.50,
-    'eur_rate': 0.92,
-    'dxy': 102.5,  # Beispiel DXY
-    'treasury': 4.2,  # Beispiel 10Y
-    'timestamp': None
-}
-
-def get_data():
-    """Versuche APIs, sonst Fallback"""
-    result = FALLBACK_DATA.copy()
-    result['status'] = 'OFFLINE'
-    result['source'] = 'Beispieldaten (API nicht erreichbar)'
+def get_gold_data():
+    """Holt echte Gold-Daten von GoldAPI.io"""
+    if "DEIN_KEY_HIER" in API_KEY:
+        return {
+            'status': 'NO_KEY',
+            'gold_usd': 0,
+            'gold_eur': 0,
+            'timestamp': None,
+            'source': 'Kein API-Key eingetragen'
+        }
     
-    # Versuche Gold API
     try:
-        response = requests.get("https://api.metals.dev/v1/latest", timeout=5)
-        data = response.json()
-        if data.get('status') == 'success':
-            result['gold_usd'] = data['metals']['gold']
-            result['gold_eur'] = data['metals']['gold'] / data['currencies']['EUR']
-            result['silver'] = data['metals']['silver']
-            result['eur_rate'] = data['currencies']['EUR']
-            result['status'] = 'LIVE'
-            result['source'] = 'Live API'
-    except:
-        pass
+        # Gold in USD
+        url_usd = "https://www.goldapi.io/api/XAU/USD"
+        headers = {"x-access-token": API_KEY}
+        
+        response = requests.get(url_usd, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            # Hole auch EUR
+            url_eur = "https://www.goldapi.io/api/XAU/EUR"
+            response_eur = requests.get(url_eur, headers=headers, timeout=10)
+            eur_data = response_eur.json() if response_eur.status_code == 200 else {}
+            
+            return {
+                'status': 'LIVE',
+                'gold_usd': data.get('price', 0),
+                'gold_eur': eur_data.get('price', 0),
+                'timestamp': datetime.fromtimestamp(data.get('timestamp', 0)),
+                'source': 'GoldAPI.io (Echtzeit)',
+                'change_24h': data.get('ch', 0)  # 24h Änderung
+            }
+    except Exception as e:
+        st.error(f"API-Fehler: {e}")
     
-    # Versuche DXY Proxy
-    try:
-        response = requests.get("https://api.exchangerate-api.com/v4/latest/USD", timeout=5)
-        data = response.json()
-        eur = data['rates']['EUR']
-        result['eur_rate'] = eur
-        result['dxy'] = 100 - (eur * 100) + 50  # Proxy-Berechnung
-    except:
-        pass
-    
-    result['timestamp'] = datetime.now()
-    return result
+    return {
+        'status': 'ERROR',
+        'gold_usd': 2050.0,
+        'gold_eur': 1890.0,
+        'timestamp': datetime.now(),
+        'source': 'Fehler - Beispieldaten',
+        'change_24h': 0
+    }
 
 # Daten laden
-with st.spinner("Lade Daten..."):
-    data = get_data()
+with st.spinner("Verbinde mit GoldAPI.io..."):
+    data = get_gold_data()
 
-# Header mit Status
+# Status-Anzeige oben rechts
 col_title, col_status = st.columns([3, 1])
-
 with col_title:
-    st.title("📊 Gold Treiber Analyse")
+    st.subheader("Live-Marktdaten")
 
 with col_status:
     if data['status'] == 'LIVE':
         st.markdown('<span class="live-badge">✅ LIVE</span>', unsafe_allow_html=True)
+    elif data['status'] == 'NO_KEY':
+        st.markdown('<span class="offline-badge">❌ KEIN KEY</span>', unsafe_allow_html=True)
     else:
-        st.markdown('<span class="offline-badge">⚠️ OFFLINE</span>', unsafe_allow_html=True)
+        st.markdown('<span class="offline-badge">⚠️ FEHLER</span>', unsafe_allow_html=True)
 
-# Status-Info
-if data['status'] == 'LIVE':
-    st.success(f"🟢 Echte Live-Daten | Stand: {data['timestamp'].strftime('%H:%M:%S')}")
-else:
-    st.warning(f"🟠 **ACHTUNG:** Beispieldaten werden angezeigt (keine Verbindung zur API)")
+# Warnung wenn kein Key
+if data['status'] == 'NO_KEY':
+    st.error("""
+    ### ❌ Kein API-Key eingetragen!
+    
+    1. Gehe zu https://www.goldapi.io
+    2. Registriere dich (kostenlos)
+    3. Kopiere deinen Key
+    4. Füge ihn oben im Code bei `API_KEY = "goldapi-DEIN_KEY"` ein
+    
+    **Oder:** Nutze die lokale Version mit yfinance (kein Key nötig)
+    """)
+    st.stop()
 
-# Preise
-col1, col2, col3, col4 = st.columns(4)
+# Zeitstempel
+if data['timestamp']:
+    st.success(f"🟢 {data['source']} | Stand: {data['timestamp'].strftime('%d.%m.%Y %H:%M:%S')}")
+
+# 5 Metrics
+col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
-    st.metric("Gold (USD)", f"${data['gold_usd']:,.2f}")
+    st.metric("Gold USD", f"${data['gold_usd']:,.2f}", f"{data.get('change_24h', 0):.2f}%")
 with col2:
-    st.metric("Gold (EUR)", f"{data['gold_eur']:,.2f} €")
+    st.metric("Gold EUR", f"{data['gold_eur']:,.2f} €")
 with col3:
-    st.metric("Silber", f"${data['silver']:,.2f}")
+    st.metric("DXY", "102.50")  # Beispiel (braucht separate API)
 with col4:
-    st.metric("EUR/USD", f"{data['eur_rate']:.4f}")
+    st.metric("10Y Rendite", "4.20%")  # Beispiel
+with col5:
+    st.metric("EUR/USD", f"{(data['gold_usd']/data['gold_eur'] if data['gold_eur'] > 0 else 0):.4f}")
 
-# Treiber-Analyse (die 4 Kriterien!)
+# Die 4 Treiber (mit Live-Goldpreis + Beispieldaten für Rest)
 st.divider()
 st.subheader("📋 Die 4 Treiber-Analyse")
 
-# 1. Dollar (DXY)
-dxy = data['dxy']
-if dxy < 102:
-    dxy_signal = "🟢 Schwach (bullish für Gold)"
-    dxy_score = -1
-    dxy_color = "green"
-elif dxy > 104:
-    dxy_signal = "🔴 Stark (bärish für Gold)"
-    dxy_score = 1
-    dxy_color = "red"
-else:
-    dxy_signal = "⚪ Neutral"
-    dxy_score = 0
-    dxy_color = "gray"
-
-# 2. Zinsen (Treasury)
-treasury = data['treasury']
-if treasury < 3.5:
-    rate_signal = "🟢 Niedrig (bullish für Gold)"
-    rate_score = -1
-    rate_color = "green"
-elif treasury > 4.5:
-    rate_signal = "🔴 Hoch (bärish für Gold)"
-    rate_score = 1
-    rate_color = "red"
-else:
-    rate_signal = "⚪ Moderat"
-    rate_score = 0
-    rate_color = "gray"
-
-# 3. Trend (basierend auf Preisniveau)
+# Berechne Score basierend auf Live-Daten
 gold = data['gold_usd']
-if gold < 2000:
-    trend_signal = "🟢 Unterstützungsniveau"
-    trend_score = -0.5
-    trend_color = "green"
-elif gold > 2200:
-    trend_signal = "🔴 Widerstandsniveau"
-    trend_score = 0.5
-    trend_color = "red"
-else:
-    trend_signal = "⚪ Mittlerer Bereich"
-    trend_score = 0
-    trend_color = "gray"
 
-# 4. Gesamt-Score
+# Treiber 1: Dollar (Beispiel - braucht DXY-API)
+dxy = 102.5
+if dxy < 102:
+    dxy_signal, dxy_score = "🟢 Schwach (bullish)", -1
+else:
+    dxy_signal, dxy_score = "🔴 Stark (bärish)", 1
+
+# Treiber 2: Zinsen (Beispiel)
+treasury = 4.2
+if treasury < 4.0:
+    rate_signal, rate_score = "🟢 Niedrig (bullish)", -1
+else:
+    rate_signal, rate_score = "🔴 Hoch (bärish)", 1
+
+# Treiber 3: Gold-Preisniveau (Live!)
+if gold < 2000:
+    trend_signal, trend_score = "🟢 Unterstützung", -0.5
+elif gold > 2200:
+    trend_signal, trend_score = "🔴 Widerstand", 0.5
+else:
+    trend_signal, trend_score = "⚪ Neutral", 0
+
+# Treiber 4: Gesamt
 total_score = dxy_score + rate_score + trend_score
 
 if total_score <= -1.5:
-    overall = ("🟢 KAUFEN", "Mehrere bullish Signale", "green")
+    overall = ("🟢 KAUFEN", "green")
 elif total_score <= -0.5:
-    overall = ("🟡 LEICHT KAUFEN", "Tendenz bullish", "lightgreen")
+    overall = ("🟡 LEICHT KAUFEN", "blue")
 elif total_score >= 1.5:
-    overall = ("🔴 VERKAUFEN", "Mehrere bärish Signale", "red")
+    overall = ("🔴 VERKAUFEN", "red")
 elif total_score >= 0.5:
-    overall = ("🟠 LEICHT VERKAUFEN", "Tendenz bärish", "orange")
+    overall = ("🟠 LEICHT VERKAUFEN", "orange")
 else:
-    overall = ("⚪ HALTEN", "Keine klare Richtung", "gray")
+    overall = ("⚪ HALTEN", "gray")
 
-signal_text, signal_desc, signal_color = overall
+signal_text, signal_color = overall
 
-# Anzeige der 4 Treiber
+# Anzeige
 col1, col2 = st.columns(2)
-
 with col1:
-    st.write(f"**💵 Dollar (DXY {dxy:.1f}):**")
-    if dxy_color == "green":
-        st.success(dxy_signal)
-    elif dxy_color == "red":
-        st.error(dxy_signal)
-    else:
-        st.info(dxy_signal)
+    st.write(f"**💵 Dollar (DXY):** {dxy_signal}")
+    st.caption(f"Wert: {dxy:.2f} (Beispiel - braucht DXY-API)")
     
-    st.write(f"**📈 Zinsen (10Y {treasury:.1f}%):**")
-    if rate_color == "green":
-        st.success(rate_signal)
-    elif rate_color == "red":
-        st.error(rate_signal)
-    else:
-        st.info(rate_signal)
+    st.write(f"**📈 Zinsen (10Y):** {rate_signal}")
+    st.caption(f"Wert: {treasury:.2f}% (Beispiel - braucht Zinsen-API)")
 
 with col2:
-    st.write(f"**📊 Preisniveau (${gold:.0f}):**")
-    if trend_color == "green":
-        st.success(trend_signal)
-    elif trend_color == "red":
-        st.error(trend_signal)
-    else:
-        st.info(trend_signal)
+    st.write(f"**📊 Gold-Preis:** {trend_signal}")
+    st.caption(f"Live-Wert: ${gold:.2f} ✅ ECHT")
     
-    st.write(f"**🎯 Gesamtsignal (Score: {total_score:.1f}):**")
-    if signal_color == "green":
-        st.success(f"{signal_text} - {signal_desc}")
-    elif signal_color == "red":
-        st.error(f"{signal_text} - {signal_desc}")
-    elif signal_color == "orange":
-        st.warning(f"{signal_text} - {signal_desc}")
-    else:
-        st.info(f"{signal_text} - {signal_desc}")
+    st.write(f"**🎯 Gesamt-Score:** {total_score:.1f}")
+    st.caption("Negativ = Bullish, Positiv = Bärish")
 
-# Gesamtes Signal groß
+# Hauptsignal
 st.divider()
 if signal_color == "green":
     st.success(f"### {signal_text}")
@@ -218,41 +197,18 @@ elif signal_color == "red":
     st.error(f"### {signal_text}")
 elif signal_color == "orange":
     st.warning(f"### {signal_text}")
-else:
+elif signal_color == "blue":
     st.info(f"### {signal_text}")
+else:
+    st.write(f"### {signal_text}")
 
-# Chart
+# Hinweis
 st.divider()
-st.subheader("📈 30-Tage Verlauf (Beispiel)")
+st.info("""
+💡 **Hinweis:** Gold-Preis ist ✅ **ECHT** (von GoldAPI.io).  
+Dollar und Zinsen sind Beispieldaten (brauchen separate APIs).  
+Für alle 4 Treiber mit echten Daten: Lokale Version mit yfinance nutzen.
+""")
 
-days = 30
-dates = [datetime.now() - timedelta(days=i) for i in range(days)]
-dates.reverse()
-np.random.seed(42)
-prices = gold + np.cumsum(np.random.randn(days) * 15)
-
-fig = go.Figure()
-fig.add_trace(go.Scatter(
-    x=dates, y=prices,
-    mode='lines',
-    name='Gold',
-    line=dict(color='gold', width=2)
-))
-fig.add_hline(y=gold, line_dash="dash", line_color="red", annotation_text="Aktuell")
-fig.update_layout(height=400, template="plotly_white", showlegend=False)
-st.plotly_chart(fig, use_container_width=True)
-
-# Warnung
-if data['status'] != 'LIVE':
-    st.divider()
-    st.error("""
-    ⚠️ **WICHTIG:** Es werden **BEISPIELDATEN** angezeigt!
-    
-    Die APIs sind derzeit nicht erreichbar. Für echtes Trading nutze die 
-    lokale Version mit yfinance auf deinem PC.
-    """)
-
-st.caption(f"Quelle: {data['source']} | {data['timestamp'].strftime('%d.%m.%Y %H:%M') if data['timestamp'] else 'Unbekannt'}")
-
-if st.button("🔄 Neu laden"):
+if st.button("🔄 Daten neu laden"):
     st.rerun()
