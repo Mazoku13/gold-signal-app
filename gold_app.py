@@ -190,14 +190,14 @@ else:
 # Treiber 4: Gesamt-Score (KORRIGIERT!)
 total_score = dxy_score + rate_score + trend_score
 
-# Score-Logik für ALLE Werte (inkl. 2.5)
-if total_score >= 2:
+# KORRIGIERTE Logik - symmetrisch für alle Werte
+if total_score >= 1.5:
     overall_text, overall_color = "🔴 VERKAUFEN", "red"
-elif total_score >= 1:
+elif total_score >= 0.5:
     overall_text, overall_color = "🟠 LEICHT VERKAUFEN", "orange"
-elif total_score <= -2:
+elif total_score <= -1.5:
     overall_text, overall_color = "🟢 KAUFEN", "green"
-elif total_score <= -1:
+elif total_score <= -0.5:
     overall_text, overall_color = "🟡 LEICHT KAUFEN", "blue"
 else:
     overall_text, overall_color = "⚪ HALTEN", "gray"
